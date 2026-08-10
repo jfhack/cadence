@@ -1,0 +1,49 @@
+#!/bin/sh
+# mount the app and the API under configurable paths.
+#
+# sourced (not executed) by the nginx entrypoint, which is what the `.envsh`
+# suffix asks for, so the variables it exports are visible to the envsubst
+# step that renders /etc/nginx/templates/*.template afterwards.
+#
+# FRONTEND_PATH and API_PATH are independent and both default to "/".
+# serving from a secret path is obfuscation, not access control: it keeps the
+# app out of crawlers and casual scans, and nothing more.
+
+set -eu
+
+# "/", "/foo", "foo", "/foo/" all normalize to a prefix that is either empty
+# (root) or "/foo", with no trailing slash, so "${PREFIX}/" is always correct.
+normalize_prefix() {
+    raw=$(printf '%s' "${1:-/}" | tr -s '/')      # collapse repeated slashes
+    raw="/${raw#/}"                               # ensure exactly one leading slash
+    raw="${raw%/}"                                # drop any trailing slash
+    printf '%s' "$raw"
+}
+
+CADENCE_FRONTEND_PREFIX=$(normalize_prefix "${FRONTEND_PATH:-/}")
+CADENCE_API_PREFIX=$(normalize_prefix "${API_PATH:-/}")
+
+# the catch-all deny and the no-trailing-slash redirect only make sense when
+# the app is not already at the root.
+if [ -n "$CADENCE_FRONTEND_PREFIX" ]; then
+    CADENCE_ROOT_DENY='    location / { return 404; }'
+    CADENCE_FRONTEND_REDIRECT="    location = ${CADENCE_FRONTEND_PREFIX} { return 301 ${CADENCE_FRONTEND_PREFIX}/; }"
+else
+    CADENCE_ROOT_DENY=''
+    CADENCE_FRONTEND_REDIRECT=''
+fi
+
+export CADENCE_FRONTEND_PREFIX CADENCE_API_PREFIX CADENCE_ROOT_DENY CADENCE_FRONTEND_REDIRECT
+
+# teach the built app where it lives. the base href fixes every relative
+# asset (scripts, worklet, logo, favicons); the runtime object tells the HTTP
+# and websocket layers which prefix the API answers on.
+INDEX=/usr/share/nginx/html/index.html
+if [ -f "$INDEX" ]; then
+    sed -i \
+        -e "s|<base href=\"[^\"]*\">|<base href=\"${CADENCE_FRONTEND_PREFIX}/\">|" \
+        -e "s|window.__CADENCE__=[^<]*|window.__CADENCE__={\"apiBase\":\"${CADENCE_API_PREFIX}\"};|" \
+        "$INDEX"
+fi
+
+echo "cadence: app at ${CADENCE_FRONTEND_PREFIX:-/}/ , API at ${CADENCE_API_PREFIX:-/}/"

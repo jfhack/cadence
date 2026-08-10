@@ -1,0 +1,110 @@
+map $http_upgrade $connection_upgrade {
+    default upgrade;
+    ''      close;
+}
+
+# hashed build artifacts can be cached forever; everything else must be
+# revalidated. done with a map rather than a regex location because regex
+# locations out-rank prefix ones, which would hijack the app's assets once it
+# is mounted under a path.
+map $uri $cadence_cache_control {
+    default                                        "no-cache";
+    ~*\.(js|css|woff2?|svg|png|jpg|jpeg|gif|ico)$  "public, max-age=31536000, immutable";
+}
+
+# burst protection, per client address. the daily budget bounds total spend;
+# this stops a stuck or hostile client hammering the expensive endpoints in
+# the meantime. generous enough that normal use never notices.
+limit_req_zone $binary_remote_addr zone=cadence_api:10m rate=${API_RATE_LIMIT}r/s;
+
+# Docker's embedded DNS. nginx resolves a literal proxy_pass host once at
+# startup, so a backend container that comes back with a new IP would be
+# unreachable until nginx restarted. resolving through a variable (below)
+# re-checks DNS instead of pinning the first address forever.
+resolver ${NGINX_RESOLVER} valid=10s ipv6=off;
+
+server {
+    listen 80;
+    server_name _;
+
+    root /usr/share/nginx/html;
+    server_tokens off;
+
+    gzip on;
+    gzip_vary on;
+    gzip_comp_level 5;
+    gzip_min_length 1024;
+    gzip_types text/css application/javascript application/json image/svg+xml;
+
+    add_header X-Content-Type-Options nosniff always;
+    add_header Referrer-Policy strict-origin-when-cross-origin always;
+
+    # zero-byte 404 body. `return 404 ""` still renders nginx's stock page,
+    # which would at least announce a web server, so serve an empty file.
+    error_page 404 /__nothing;
+    location = /__nothing {
+        internal;
+        alias /usr/share/nginx/nothing/empty;
+    }
+
+    # anything outside the configured paths answers as though nothing is
+    # hosted here. the entrypoint emits this only when the app is not already
+    # at the root, since two `location /` blocks cannot coexist.
+${CADENCE_ROOT_DENY}
+
+    # --- API ---------------------------------------------------------------
+    # the prefix is stripped before the request reaches the backend, so the
+    # backend never has to know it is mounted somewhere unusual.
+    location ${CADENCE_API_PREFIX}/api/ {
+        limit_req zone=cadence_api burst=${API_RATE_BURST} nodelay;
+        limit_req_status 429;
+        set $api_upstream http://${BACKEND_HOST}:${BACKEND_PORT};
+        rewrite ^${CADENCE_API_PREFIX}/api/(.*)$ /api/$1 break;
+        proxy_pass $api_upstream$uri$is_args$args;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
+    location ${CADENCE_API_PREFIX}/ws/ {
+        set $ws_upstream http://${BACKEND_HOST}:${BACKEND_PORT};
+        rewrite ^${CADENCE_API_PREFIX}/ws/(.*)$ /ws/$1 break;
+        proxy_pass $ws_upstream$uri$is_args$args;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection $connection_upgrade;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_read_timeout 3600s;
+        proxy_send_timeout 3600s;
+        proxy_buffering off;
+    }
+
+    # --- app ---------------------------------------------------------------
+    # send /the-path to /the-path/, so relative assets resolve against the
+    # base href. emitted only when the app sits under a path.
+${CADENCE_FRONTEND_REDIRECT}
+
+    location ${CADENCE_FRONTEND_PREFIX}/ {
+        rewrite ^${CADENCE_FRONTEND_PREFIX}/(.*)$ /$1 break;
+        # the deep-link fallback goes to a named location: try_files' last
+        # argument is an internal redirect, so a plain "/index.html" would
+        # re-enter location matching and be swallowed by the deny above.
+        # no `$uri/`: this is a single-page app, so a directory match would
+        # only ever be the bare prefix, which belongs to index.html anyway.
+        try_files $uri @cadence_app;
+        add_header Cache-Control $cadence_cache_control always;
+        add_header X-Content-Type-Options nosniff always;
+        add_header Referrer-Policy strict-origin-when-cross-origin always;
+    }
+
+    location @cadence_app {
+        try_files /index.html =404;
+        add_header Cache-Control "no-cache" always;
+        add_header X-Content-Type-Options nosniff always;
+        add_header Referrer-Policy strict-origin-when-cross-origin always;
+    }
+}

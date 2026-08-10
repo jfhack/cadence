@@ -1,0 +1,44 @@
+# Caddy terminates TLS (certificates are obtained automatically) and puts
+# Authelia in front of the app. only two names are served; anything else is
+# refused, so the server does not answer for hostnames it was not given.
+
+# certificates are issued automatically. to get expiry notices from the ACME
+# provider, add a global block above the sites:
+#     {
+#         email you@example.com
+#     }
+
+# --- the app -----------------------------------------------------------------
+{$CADENCE_DOMAIN} {
+	encode zstd gzip
+
+	# every request is checked with Authelia first. an unauthenticated visitor
+	# is redirected to the portal; nothing behind this line is reachable
+	# without a session, including the websocket used for recording.
+	forward_auth cadence-authelia:9091 {
+		uri /api/authz/forward-auth
+		copy_headers Remote-User Remote-Groups Remote-Name Remote-Email
+	}
+
+	# reverse_proxy passes websocket upgrades through unchanged.
+	reverse_proxy cadence-frontend:80
+
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		-Server
+	}
+}
+
+# --- the login portal --------------------------------------------------------
+{$AUTH_DOMAIN} {
+	encode zstd gzip
+	reverse_proxy cadence-authelia:9091
+
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		-Server
+	}
+}

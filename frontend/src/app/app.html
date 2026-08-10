@@ -1,0 +1,39 @@
+<mat-toolbar class="app-toolbar">
+  <img class="brand-logo" [src]="logoSrc()" alt="" width="29" height="32" />
+  <span class="brand">Cadence</span>
+  <span class="tagline">pronunciation assessment</span>
+  <span class="spacer"></span>
+  <button
+    matIconButton
+    [matMenuTriggerFor]="themeMenu"
+    matTooltip="Theme"
+    aria-label="Choose theme"
+  >
+    <mat-icon>{{ themeIcon() }}</mat-icon>
+  </button>
+  <mat-menu #themeMenu="matMenu">
+    @for (option of themeOptions; track option.mode) {
+      <button mat-menu-item (click)="theme.set(option.mode)">
+        <mat-icon>{{ option.icon }}</mat-icon>
+        <span>{{ option.label }}</span>
+        @if (theme.mode() === option.mode) {
+          <mat-icon class="menu-check">check</mat-icon>
+        }
+      </button>
+    }
+  </mat-menu>
+  <a
+    matIconButton
+    href="https://github.com/jfhack/cadence"
+    target="_blank"
+    rel="noopener"
+    matTooltip="Source on GitHub"
+    aria-label="Source on GitHub"
+  >
+    <mat-icon>code</mat-icon>
+  </a>
+</mat-toolbar>
+
+<main>
+  <router-outlet />
+</main>

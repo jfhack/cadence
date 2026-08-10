@@ -1,0 +1,648 @@
+<div class="page">
+  <mat-card appearance="outlined" class="practice-card">
+    <mat-card-content>
+      <div class="practice-head">
+        <mat-form-field appearance="outline" class="locale-field" subscriptSizing="dynamic">
+          <mat-label>Language</mat-label>
+          <input
+            #localeSearchInput
+            matInput
+            type="text"
+            [ngModel]="localeInput()"
+            (ngModelChange)="localeInput.set($event)"
+            [matAutocomplete]="localeAuto"
+            [disabled]="session.busy()"
+            (input)="onLocaleTyped(localeSearchInput)"
+            (focus)="onLocaleFocus(localeSearchInput)"
+            placeholder="Type to search…"
+          />
+          <mat-icon matSuffix>arrow_drop_down</mat-icon>
+          <mat-autocomplete
+            #localeAuto="matAutocomplete"
+            requireSelection
+            [displayWith]="localeName"
+            (optionSelected)="onLocaleSelected($event)"
+            (closed)="onLocaleClosed()"
+          >
+            @for (item of filteredLocales(); track item.locale) {
+              <mat-option [value]="item">
+                {{ item.name }}
+                <span class="locale-code">{{ item.locale }}</span>
+              </mat-option>
+            } @empty {
+              <mat-option disabled>No language matches</mat-option>
+            }
+          </mat-autocomplete>
+        </mat-form-field>
+
+        <mat-button-toggle-group
+          class="mode-toggle"
+          [ngModel]="mode()"
+          (ngModelChange)="mode.set($event)"
+          [disabled]="session.busy()"
+          aria-label="Assessment mode"
+          hideSingleSelectionIndicator
+        >
+          <mat-button-toggle
+            value="single"
+            matTooltip="One utterance; stops automatically after a pause"
+          >
+            <mat-icon>graphic_eq</mat-icon>
+            Single
+          </mat-button-toggle>
+          <mat-button-toggle
+            value="continuous"
+            matTooltip="Keeps listening across pauses until you stop it"
+          >
+            <mat-icon>all_inclusive</mat-icon>
+            Continuous
+          </mat-button-toggle>
+        </mat-button-toggle-group>
+      </div>
+
+      @if (translator.enabled()) {
+        <div class="translate-block">
+          <button
+            matButton
+            class="translate-toggle"
+            (click)="toggleTranslator()"
+            [attr.aria-expanded]="showTranslator()"
+          >
+            <mat-icon>{{ showTranslator() ? 'expand_less' : 'translate' }}</mat-icon>
+            Write in your own language
+          </button>
+
+          @if (showTranslator()) {
+            <mat-form-field appearance="outline" class="reference-field" subscriptSizing="dynamic">
+              <mat-label>Your text (any language)</mat-label>
+              <textarea
+                matInput
+                rows="3"
+                [ngModel]="sourceText()"
+                (ngModelChange)="sourceText.set($event)"
+                [disabled]="session.busy()"
+                placeholder="Write it however you think it, then translate."
+              ></textarea>
+              <mat-hint>
+                Translated into {{ selectedLocaleName() }} and placed in the reference text below.
+              </mat-hint>
+            </mat-form-field>
+            <div class="translate-actions">
+              <button
+                matButton="tonal"
+                (click)="translateSource()"
+                [disabled]="!sourceText().trim() || translator.busy()"
+              >
+                @if (translator.busy()) {
+                  <mat-spinner diameter="18" />
+                } @else {
+                  <mat-icon>translate</mat-icon>
+                }
+                Translate
+              </button>
+              @if (translator.error(); as translateError) {
+                <span class="tts-error">{{ translateError }}</span>
+              }
+            </div>
+          }
+        </div>
+      }
+
+      <mat-form-field appearance="outline" class="reference-field">
+        <mat-label>Reference text</mat-label>
+        <textarea
+          matInput
+          rows="3"
+          [ngModel]="referenceText()"
+          (ngModelChange)="referenceText.set($event)"
+          [disabled]="session.busy()"
+          placeholder="What will you read aloud?"
+        ></textarea>
+        <mat-hint>Leave empty for an unscripted assessment of whatever you say.</mat-hint>
+      </mat-form-field>
+
+      <div class="action-bar">
+        <button
+          matFab
+          class="record-button"
+          [class.recording]="session.status() === 'recording'"
+          (click)="toggleRecording()"
+          [attr.aria-label]="
+            session.status() === 'recording' ? 'Stop recording' : 'Start recording'
+          "
+        >
+          <mat-icon>{{ recordIcon() }}</mat-icon>
+        </button>
+
+        <div class="action-status">
+          <span class="status-text">{{ statusLabel() }}</span>
+          @if (session.status() === 'recording') {
+            <div class="meter-row">
+              <span class="elapsed">{{ formatElapsed(session.elapsedMs()) }}</span>
+              <app-level-meter
+                class="record-meter"
+                [level]="session.level()"
+                [clipping]="session.clipping()"
+              />
+            </div>
+          }
+          @if (session.status() === 'processing') {
+            <mat-progress-bar mode="indeterminate" />
+          }
+        </div>
+
+        @if (tts.usableProviders().length > 1) {
+          <button
+            matButton="tonal"
+            class="listen-button"
+            [matMenuTriggerFor]="listenMenu"
+            [disabled]="!modelText() || synthesizingPhrase()"
+            matTooltip="Hear this passage (choose a voice)"
+          >
+            @if (synthesizingPhrase()) {
+              <mat-spinner diameter="18" />
+            } @else {
+              <mat-icon>volume_up</mat-icon>
+            }
+            Listen
+          </button>
+          <mat-menu #listenMenu="matMenu">
+            <button mat-menu-item (click)="listenToPhrase()">
+              <mat-icon>graphic_eq</mat-icon>
+              <span>{{ listenAllLabel() }}</span>
+            </button>
+            <mat-divider />
+            @for (provider of tts.usableProviders(); track provider.id) {
+              <button mat-menu-item (click)="listenWith(provider.id)">
+                <mat-icon>volume_up</mat-icon>
+                <span class="menu-provider">{{ provider.label }}</span>
+                <span class="menu-voice">{{ tts.selectedVoiceFor(provider.id)?.name }}</span>
+              </button>
+            }
+          </mat-menu>
+        } @else if (tts.usableProviders().length === 1) {
+          <button
+            matButton="tonal"
+            class="listen-button"
+            (click)="listenToPhrase()"
+            [disabled]="!modelText() || synthesizingPhrase()"
+            matTooltip="Hear this passage read aloud"
+          >
+            @if (synthesizingPhrase()) {
+              <mat-spinner diameter="18" />
+            } @else {
+              <mat-icon>volume_up</mat-icon>
+            }
+            Listen
+          </button>
+        }
+      </div>
+    </mat-card-content>
+  </mat-card>
+
+  @for (provider of tts.brokenProviders(); track provider.id) {
+    <div class="tts-warning">
+      <mat-icon>warning_amber</mat-icon>
+      <span>{{ provider.label }} voices are unavailable: {{ provider.error }}</span>
+    </div>
+  }
+
+  @if (session.error(); as errorMessage) {
+    <div class="error-banner" role="alert">
+      <mat-icon>error_outline</mat-icon>
+      <span>{{ errorMessage }}</span>
+    </div>
+  }
+
+  @if (session.status() === 'recording' || session.status() === 'processing') {
+    <mat-card appearance="outlined" class="live-card">
+      <mat-card-content>
+        @for (phrase of session.phrases(); track $index) {
+          <p class="live-phrase">
+            <span class="live-score" [class]="scoreClass(phrase.scores.pronunciation)">
+              {{ formatScore(phrase.scores.pronunciation) }}
+            </span>
+            {{ phrase.text }}
+          </p>
+        }
+        @if (session.partialText(); as partial) {
+          <p class="live-partial">{{ partial }}…</p>
+        } @else if (session.phrases().length === 0) {
+          <p class="live-placeholder">Start speaking and your words will appear here.</p>
+        }
+      </mat-card-content>
+    </mat-card>
+  }
+
+  @if (modelClips().length > 0) {
+    <mat-card appearance="outlined" class="player-card">
+      <mat-card-content>
+        <span class="player-label">
+          <mat-icon class="model-icon">graphic_eq</mat-icon>
+          Model pronunciation
+        </span>
+        @for (clip of modelClips(); track clip.providerId) {
+          <div class="model-clip">
+            <span class="clip-source">
+              <span class="clip-provider">{{ clip.providerLabel }}</span>
+              <span class="clip-voice">{{ clip.voiceName }}</span>
+            </span>
+            <app-audio-player
+              [recording]="clip.recording"
+              [langCode]="selectedLocale()"
+              [labelText]="clip.text"
+            />
+          </div>
+        }
+      </mat-card-content>
+    </mat-card>
+  }
+
+  @if (session.quietInput()) {
+    <div class="quiet-banner">
+      <mat-icon>mic_none</mat-icon>
+      <span>
+        Your input was very quiet, which can lower the scores. Move closer to the microphone,
+        raise the input gain, or enable automatic gain control under Microphone.
+      </span>
+    </div>
+  }
+
+  @if (session.recording(); as recording) {
+    <mat-card appearance="outlined" class="player-card">
+      <mat-card-content>
+        <span class="player-label">
+          <mat-icon class="model-icon">mic</mat-icon>
+          Your recording
+        </span>
+        <app-audio-player
+          [recording]="recording"
+          [langCode]="session.lastOptions()?.locale ?? ''"
+          [labelText]="downloadText()"
+        />
+      </mat-card-content>
+    </mat-card>
+  }
+
+  @if (displayResult(); as result) {
+    <mat-card appearance="outlined" class="result-card">
+      <mat-card-header>
+        <mat-card-title>Results</mat-card-title>
+        <mat-card-subtitle>{{ result.text }}</mat-card-subtitle>
+      </mat-card-header>
+      <mat-card-content>
+        <div class="gauges">
+          <app-score-gauge
+            [score]="result.scores.pronunciation"
+            label="Pronunciation"
+            [primary]="true"
+          />
+          <app-score-gauge [score]="result.scores.accuracy" label="Accuracy" />
+          <app-score-gauge [score]="result.scores.fluency" label="Fluency" />
+          <app-score-gauge [score]="result.scores.completeness" label="Completeness" />
+          <app-score-gauge [score]="result.scores.prosody" label="Prosody" />
+        </div>
+
+        @if (result.words.length > 0) {
+          <div class="words" role="list">
+            @for (word of result.words; track $index) {
+              <button
+                type="button"
+                [class]="wordClass(word)"
+                [class.selected]="selectedWord() === word"
+                [matTooltip]="wordTooltip(word)"
+                (click)="selectWord(word)"
+              >
+                {{ word.word }}
+              </button>
+            }
+          </div>
+          <div class="legend">
+            <span><i class="dot good"></i> ≥ 80</span>
+            <span><i class="dot mid"></i> 60–79</span>
+            <span><i class="dot bad"></i> &lt; 60 / mispronounced</span>
+            <span><i class="dot omission"></i> omitted</span>
+            <span><i class="dot insertion"></i> inserted</span>
+          </div>
+        }
+
+        @if (selectedWord(); as word) {
+          <div class="word-detail">
+            <div class="word-detail-header">
+              <span class="word-title">{{ word.word }}</span>
+              <span class="word-meta">
+                {{ word.error_type === 'None' ? 'Accuracy' : word.error_type }}
+                @if (word.error_type !== 'Omission') {
+                  · {{ formatScore(word.accuracy_score) }}
+                }
+              </span>
+              @if (tts.enabled()) {
+                <app-speak-button class="word-listen" [text]="word.word" />
+              }
+            </div>
+            @if (word.syllables.length > 0) {
+              <div class="chip-row">
+                @for (syllable of word.syllables; track $index) {
+                  <span class="chip" [class]="scoreClass(syllable.accuracy_score)">
+                    {{ syllable.syllable }}
+                    <b>{{ formatScore(syllable.accuracy_score) }}</b>
+                  </span>
+                }
+              </div>
+            }
+            @if (word.phonemes.length > 0) {
+              <div class="chip-row">
+                @for (phoneme of word.phonemes; track $index) {
+                  <span
+                    class="chip"
+                    [class]="scoreClass(phoneme.accuracy_score)"
+                    [matTooltip]="phonemeTooltip(phoneme)"
+                  >
+                    /{{ phoneme.phoneme }}/
+                    <b>{{ formatScore(phoneme.accuracy_score) }}</b>
+                  </span>
+                }
+              </div>
+            }
+            @if (word.error_type === 'Omission') {
+              <p class="word-note">This word was in the reference text but was not spoken.</p>
+            }
+          </div>
+        }
+      </mat-card-content>
+    </mat-card>
+  }
+
+  <mat-accordion class="settings">
+    @if (tts.enabled() && tts.usableProviders().length > 0) {
+      <mat-expansion-panel class="advanced-panel">
+        <mat-expansion-panel-header>
+          <mat-panel-title>Voices</mat-panel-title>
+          <mat-panel-description>{{ voicesSummary() }}</mat-panel-description>
+        </mat-expansion-panel-header>
+        <div class="voice-grid">
+          @for (provider of tts.usableProviders(); track provider.id) {
+            <app-voice-picker
+              [providerId]="provider.id"
+              [label]="provider.label"
+              [locale]="selectedLocale()"
+            />
+          }
+        </div>
+        <div class="gain-row">
+          <div class="gain-header">
+            <span class="gain-label">Voice speed</span>
+            <span class="gain-value">{{ formatRate(playback.speechRate()) }}</span>
+          </div>
+          <mat-button-toggle-group
+            class="rate-group"
+            [ngModel]="playback.speechRate()"
+            (ngModelChange)="playback.setSpeechRate($event)"
+            hideSingleSelectionIndicator
+            aria-label="Speaking rate"
+          >
+            @for (step of rateSteps; track step) {
+              <mat-button-toggle [value]="step">{{ formatRate(step) }}</mat-button-toggle>
+            }
+          </mat-button-toggle-group>
+          <span class="mic-hint gain-hint">
+            The voice is synthesized at this pace, so it re-enunciates rather than being
+            stretched. Changing it re-synthesizes on the next Listen.
+            @if (ratelessProviders().length > 0) {
+              {{ ratelessProviders().join(', ') }} cannot change its speaking rate, so use the
+              playback speed in the player instead.
+            }
+          </span>
+        </div>
+
+        @if (tts.usableProviders().length > 1) {
+          <span class="mic-hint gain-hint">
+            Listen renders the passage with all of these at once so you can compare them.
+          </span>
+        }
+
+        @if (tts.allowCustomVoices()) {
+          <div class="custom-voice">
+            <span class="gain-label">Add a voice by id</span>
+            <div class="custom-voice-row">
+              <mat-form-field appearance="outline" subscriptSizing="dynamic">
+                <mat-label>Provider</mat-label>
+                <mat-select
+                  [ngModel]="customProvider() || tts.usableProviders()[0]?.id"
+                  (ngModelChange)="customProvider.set($event)"
+                >
+                  @for (provider of tts.usableProviders(); track provider.id) {
+                    <mat-option [value]="provider.id">{{ provider.label }}</mat-option>
+                  }
+                </mat-select>
+              </mat-form-field>
+              <mat-form-field appearance="outline" subscriptSizing="dynamic" class="custom-code">
+                <mat-label>Voice id</mat-label>
+                <input
+                  matInput
+                  [ngModel]="customCode()"
+                  (ngModelChange)="customCode.set($event)"
+                  (keyup.enter)="addCustomVoice()"
+                  placeholder="e.g. en-US-AndrewMultilingualNeural"
+                />
+              </mat-form-field>
+              <button matButton="tonal" (click)="addCustomVoice()" [disabled]="!customCode().trim()">
+                <mat-icon>add</mat-icon>
+                Add
+              </button>
+            </div>
+            @if (tts.customVoices().length > 0) {
+              <div class="chip-row">
+                @for (voice of tts.customVoices(); track voice.id) {
+                  <span class="chip custom-chip">
+                    {{ voice.provider }} · {{ voice.name }}
+                    <button
+                      matIconButton
+                      class="chip-remove"
+                      (click)="tts.removeCustomVoice(voice.id)"
+                      [attr.aria-label]="'Remove ' + voice.name"
+                    >
+                      <mat-icon>close</mat-icon>
+                    </button>
+                  </span>
+                }
+              </div>
+            }
+            <span class="mic-hint gain-hint">
+              For voices the provider does not list, such as a private or preview voice on
+              your account. They appear under “Your voices” in the picker.
+            </span>
+          </div>
+        }
+      </mat-expansion-panel>
+    }
+
+    <mat-expansion-panel class="advanced-panel">
+      <mat-expansion-panel-header>
+        <mat-panel-title>Microphone</mat-panel-title>
+        <mat-panel-description>{{ formatGain(mic.gainDb()) }} · processing</mat-panel-description>
+      </mat-expansion-panel-header>
+      <div class="gain-row">
+        <div class="gain-header">
+          <span class="gain-label">Input gain</span>
+          <span class="gain-value">{{ formatGain(mic.gainDb()) }}</span>
+          @if (mic.gainDb() !== 0) {
+            <button
+              matIconButton
+              class="gain-reset"
+              (click)="mic.resetGain()"
+              matTooltip="Back to 0 dB"
+              aria-label="Reset input gain"
+            >
+              <mat-icon>restart_alt</mat-icon>
+            </button>
+          }
+        </div>
+        <mat-slider
+          [min]="minGainDb"
+          [max]="maxGainDb"
+          step="1"
+          discrete
+          [displayWith]="formatGain"
+        >
+          <input
+            matSliderThumb
+            [ngModel]="mic.gainDb()"
+            (ngModelChange)="mic.setGainDb($event)"
+            aria-label="Input gain in decibels"
+          />
+        </mat-slider>
+        <app-level-meter [level]="session.level()" [clipping]="session.clipping()" />
+        <span class="mic-hint gain-hint">
+          Aim for the green zone while speaking normally; orange is fine on peaks. Adjust it
+          while recording. It applies live.
+        </span>
+      </div>
+
+      <div class="mic-grid">
+        @for (option of micOptions; track option.key) {
+          <div class="mic-option">
+            <mat-slide-toggle
+              [checked]="mic.processing()[option.key]"
+              (change)="mic.set(option.key, $event.checked)"
+              [disabled]="session.busy() || !mic.supports(option.key)"
+            >
+              {{ option.label }}
+            </mat-slide-toggle>
+            <span class="mic-hint">
+              @if (mic.supports(option.key)) {
+                {{ option.hint }}
+              } @else {
+                Not supported by this browser, which ignores this setting.
+              }
+            </span>
+          </div>
+        }
+      </div>
+    </mat-expansion-panel>
+
+    @if (translator.enabled() && translator.promptEditable()) {
+      <mat-expansion-panel class="advanced-panel">
+        <mat-expansion-panel-header>
+          <mat-panel-title>Translation prompt</mat-panel-title>
+          <mat-panel-description>
+            {{ translator.isPromptCustomized() ? 'Customized' : 'Server default' }}
+          </mat-panel-description>
+        </mat-expansion-panel-header>
+        <mat-form-field appearance="outline" class="prompt-field" subscriptSizing="dynamic">
+          <mat-label>Prompt</mat-label>
+          <textarea
+            matInput
+            rows="3"
+            [ngModel]="translator.effectivePrompt()"
+            (ngModelChange)="translator.prompt.set($event)"
+            [disabled]="translator.busy()"
+          ></textarea>
+        </mat-form-field>
+        <div class="translate-actions">
+          <span class="mic-hint gain-hint">
+            <span class="placeholder-chip">{{ translator.languagePlaceholder() }}</span>
+            is replaced with the language you are practicing, right now
+            {{ selectedLocaleName() }}.
+          </span>
+          @if (translator.isPromptCustomized()) {
+            <button matButton (click)="translator.resetPrompt()">
+              <mat-icon>restart_alt</mat-icon>
+              Back to the server default
+            </button>
+          }
+        </div>
+      </mat-expansion-panel>
+    }
+
+    <mat-expansion-panel class="advanced-panel">
+      <mat-expansion-panel-header>
+        <mat-panel-title>Saved on this device</mat-panel-title>
+        <mat-panel-description>{{ rememberSummary() }}</mat-panel-description>
+      </mat-expansion-panel-header>
+      <div class="mic-grid">
+        @for (option of rememberOptions(); track option.key) {
+          <div class="mic-option">
+            <mat-slide-toggle
+              [checked]="prefs.isOn(option.key)"
+              (change)="prefs.set(option.key, $event.checked)"
+            >
+              {{ option.label }}
+            </mat-slide-toggle>
+            <span class="mic-hint">{{ option.hint }}</span>
+          </div>
+        }
+      </div>
+      <span class="mic-hint gain-hint">
+        Turning one off stops reading and writing it, and leaves anything already stored
+        untouched. Turning it back on saves what you have right now.
+      </span>
+    </mat-expansion-panel>
+
+    <mat-expansion-panel class="advanced-panel">
+      <mat-expansion-panel-header>
+        <mat-panel-title>Assessment options</mat-panel-title>
+        <mat-panel-description>Scoring detail sent to Azure</mat-panel-description>
+      </mat-expansion-panel-header>
+      <div class="advanced-grid">
+        <mat-slide-toggle
+          [ngModel]="enableProsody()"
+          (ngModelChange)="enableProsody.set($event)"
+          [disabled]="session.busy()"
+        >
+          Prosody assessment
+        </mat-slide-toggle>
+        <mat-slide-toggle
+          [ngModel]="enableMiscue()"
+          (ngModelChange)="enableMiscue.set($event)"
+          [disabled]="session.busy()"
+        >
+          Detect miscues (omissions & insertions)
+        </mat-slide-toggle>
+        <mat-form-field appearance="outline" subscriptSizing="dynamic">
+          <mat-label>Phoneme alphabet</mat-label>
+          <mat-select
+            [ngModel]="phonemeAlphabet()"
+            (ngModelChange)="phonemeAlphabet.set($event)"
+            [disabled]="session.busy()"
+          >
+            <mat-option value="IPA">IPA</mat-option>
+            <mat-option value="SAPI">SAPI</mat-option>
+          </mat-select>
+        </mat-form-field>
+        <mat-form-field appearance="outline" subscriptSizing="dynamic">
+          <mat-label>Spoken phoneme candidates</mat-label>
+          <mat-select
+            [ngModel]="nbestPhonemeCount()"
+            (ngModelChange)="nbestPhonemeCount.set($event)"
+            [disabled]="session.busy()"
+          >
+            <mat-option [value]="0">Off</mat-option>
+            <mat-option [value]="3">3</mat-option>
+            <mat-option [value]="5">5</mat-option>
+          </mat-select>
+        </mat-form-field>
+      </div>
+    </mat-expansion-panel>
+  </mat-accordion>
+</div>

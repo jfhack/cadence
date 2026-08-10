@@ -1,0 +1,15 @@
+# optional overlay: stop publishing the app on the host.
+#
+# useful when your reverse proxy shares a docker network with cadence and
+# reaches cadence-frontend:80 directly, so no host binding is needed and
+# port 8080 stays free.
+#
+#   docker compose -f docker-compose.yml -f docker-compose.no-ports.yml up -d
+#
+# compose cannot drop a port mapping through a variable: an empty entry is
+# rejected with "no port specified". `!reset` in an override file is the
+# supported way, which is why this is a file rather than a setting.
+
+services:
+  cadence-frontend:
+    ports: !reset []

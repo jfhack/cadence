@@ -1,0 +1,49 @@
+# production deployment: nginx serves the Angular build and proxies
+# /api + /ws to the backend, so only the frontend port is published.
+#
+#   cp .env.example .env   # fill in the Azure credentials
+#   docker compose up -d [--build]
+
+services:
+  cadence-backend:
+    container_name: cadence-backend
+    image: ghcr.io/jfhack/cadence-backend:${CADENCE_VERSION:-latest}
+    build:
+      context: ./backend
+      target: prod
+    env_file:
+      - path: .env
+        required: false
+    restart: unless-stopped
+    expose:
+      - "8000"
+
+  cadence-frontend:
+    container_name: cadence-frontend
+    image: ghcr.io/jfhack/cadence-frontend:${CADENCE_VERSION:-latest}
+    build:
+      context: ./frontend
+      target: runtime
+    environment:
+      BACKEND_HOST: cadence-backend
+      BACKEND_PORT: 8000
+      # independent; "/" keeps the classic layout.
+      FRONTEND_PATH: ${FRONTEND_PATH:-/}
+      API_PATH: ${API_PATH:-/}
+    depends_on:
+      - cadence-backend
+    ports:
+      # bind address is configurable: set CADENCE_BIND=127.0.0.1 when a
+      # reverse proxy on this host fronts the app, so nobody can reach it
+      # directly and skip whatever authentication sits in front.
+      - "${CADENCE_BIND:-0.0.0.0}:${CADENCE_PORT:-8080}:80"
+    restart: unless-stopped
+
+networks:
+  default:
+    name: ${CADENCE_NETWORK:-cadence_default}
+    # set CADENCE_NETWORK_EXTERNAL=true to join a network that already exists,
+    # such as the one your reverse proxy runs on. compose then does not create
+    # or remove it, and your proxy can reach cadence-frontend:80 and
+    # cadence-authelia:9091 by name.
+    external: ${CADENCE_NETWORK_EXTERNAL:-false}

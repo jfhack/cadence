@@ -1,0 +1,17 @@
+# optional overlay: stop publishing Authelia on the host.
+#
+# the companion to docker-compose.no-ports.yml, for when your proxy reaches
+# cadence-authelia:9091 over a shared docker network. it must come after
+# docker-compose.authelia.yml, which is where the service is defined.
+#
+#   docker compose -f docker-compose.yml \
+#                  -f docker-compose.authelia.yml \
+#                  -f docker-compose.no-ports.yml \
+#                  -f docker-compose.authelia-no-ports.yml up -d
+#
+# kept separate from docker-compose.no-ports.yml because an override cannot
+# mention a service the base file does not define.
+
+services:
+  cadence-authelia:
+    ports: !reset []

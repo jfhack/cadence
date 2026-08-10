@@ -1,0 +1,49 @@
+# development with live reload on both sides:
+#
+#   docker compose -f docker-compose.dev.yml up --build
+#
+# frontend: http://localhost:4200 (ng serve, hot reload, proxies to backend)
+# backend:  http://localhost:8000 (uvicorn --reload, code bind-mounted)
+
+services:
+  cadence-backend:
+    container_name: cadence-backend-dev
+    build:
+      context: ./backend
+      target: dev
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:4200}
+    volumes:
+      - ./backend/app:/srv/cadence/app
+    ports:
+      - "8000:8000"
+
+  cadence-frontend:
+    container_name: cadence-frontend-dev
+    image: node:22-alpine
+    working_dir: /app
+    command: sh -c "npm install --no-audit --no-fund && npm start -- --host 0.0.0.0 --port 4200"
+    environment:
+      CADENCE_API_TARGET: http://cadence-backend:8000
+    volumes:
+      - ./frontend:/app
+      - frontend_node_modules:/app/node_modules
+    ports:
+      - "4200:4200"
+    depends_on:
+      - cadence-backend
+
+volumes:
+  frontend_node_modules:
+
+networks:
+  default:
+    name: ${CADENCE_NETWORK:-cadence_default}
+    # set CADENCE_NETWORK_EXTERNAL=true to join a network that already exists,
+    # such as the one your reverse proxy runs on. compose then does not create
+    # or remove it, and your proxy can reach cadence-frontend:80 and
+    # cadence-authelia:9091 by name.
+    external: ${CADENCE_NETWORK_EXTERNAL:-false}
