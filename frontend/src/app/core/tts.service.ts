@@ -7,6 +7,7 @@ import { TtsCatalog, TtsVoice } from './models';
 import { PlaybackSettingsService } from './playback-settings.service';
 import { PracticeSettingsService } from './practice-settings.service';
 import { PreferencesService } from './preferences.service';
+import { persistOnChange } from './persist';
 
 const EMPTY: TtsCatalog = { enabled: false, providers: [], voices: [] };
 const STORAGE_KEY = 'cadence.voices';
@@ -93,7 +94,7 @@ export class TtsService {
   private decodeContext: AudioContext | null = null;
 
   constructor() {
-    effect(() => this.persist(this.selections()));
+    persistOnChange(this.selections, (value) => this.persist(value));
     this.prefs.onEnable('voices', () => this.persist(this.selections()));
   }
 

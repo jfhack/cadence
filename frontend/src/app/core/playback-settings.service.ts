@@ -1,4 +1,5 @@
 import { Injectable, effect, signal } from '@angular/core';
+import { persistOnChange } from './persist';
 
 const STORAGE_KEY = 'cadence.playback';
 
@@ -20,8 +21,9 @@ export class PlaybackSettingsService {
   readonly playbackRate = signal(this.restore('playbackRate'));
 
   constructor() {
-    effect(() =>
-      this.persist({ speechRate: this.speechRate(), playbackRate: this.playbackRate() }),
+    persistOnChange(
+      () => ({ speechRate: this.speechRate(), playbackRate: this.playbackRate() }),
+      (value) => this.persist(value),
     );
   }
 

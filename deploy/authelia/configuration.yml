@@ -25,6 +25,10 @@ authentication_backend:
     disable: true
   file:
     path: '/config/users.yml'
+    # pick up edits to users.yml without a restart, so disabling a compromised
+    # account takes effect right away. this needs /config mounted as a
+    # directory: inotify does not see writes through a single-file bind mount.
+    watch: true
     password:
       algorithm: 'argon2'
 

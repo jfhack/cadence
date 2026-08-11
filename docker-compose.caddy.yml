@@ -3,6 +3,10 @@
 #
 #   cp .env.example .env          # fill in CADENCE_DOMAIN and AUTH_DOMAIN
 #   scripts/init-auth.sh          # generate secrets and the first user
+#   scripts/stack.sh start --caddy   # same as the -f chain below
+#
+# or by hand:
+#
 #   docker compose -f docker-compose.yml -f docker-compose.caddy.yml up -d
 #
 # already running a reverse proxy? do not use this file; see the README for
@@ -47,8 +51,10 @@ services:
       AUTHELIA_STORAGE_ENCRYPTION_KEY: ${AUTHELIA_STORAGE_ENCRYPTION_KEY:?run scripts/init-auth.sh}
       AUTHELIA_IDENTITY_VALIDATION_RESET_PASSWORD_JWT_SECRET: ${AUTHELIA_JWT_SECRET:?run scripts/init-auth.sh}
     volumes:
-      - ./deploy/authelia/configuration.yml:/config/configuration.yml:ro
-      - ./deploy/authelia/users.yml:/config/users.yml:ro
+      # the directory, not the two files: Authelia watches users.yml so that
+      # disabling an account applies without a restart, and inotify does not
+      # see writes through a single-file bind mount.
+      - ./deploy/authelia:/config:ro
       - ${CADENCE_AUTHELIA_DATA:-authelia_data}:/data
 
   cadence-frontend:

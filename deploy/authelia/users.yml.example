@@ -7,6 +7,9 @@
 #     authelia crypto hash generate argon2 --password 'your-password'
 #
 # add family members by copying a block and giving them their own hash.
+#
+# Authelia watches this file. flipping `disabled` to true blocks new logins
+# and drops that user's existing session within a second or two, no restart.
 users:
   alice:
     disabled: false

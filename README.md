@@ -175,7 +175,7 @@ proxying to you:
 ```sh
 cp .env.example .env         # set CADENCE_DOMAIN and AUTH_DOMAIN
 scripts/init-auth.sh         # generates secrets, creates the first user
-docker compose -f docker-compose.yml -f docker-compose.authelia.yml up -d
+scripts/stack.sh start       # app + Authelia
 ```
 
 Authelia listens on `127.0.0.1:9091` and the app on `127.0.0.1:8080` (set
@@ -209,7 +209,7 @@ It also unpublishes the app entirely, so the only way in is through the login.
 ```sh
 cp .env.example .env         # set CADENCE_DOMAIN and AUTH_DOMAIN
 scripts/init-auth.sh         # generates secrets, creates the first user
-docker compose -f docker-compose.yml -f docker-compose.caddy.yml up -d
+scripts/stack.sh start --caddy
 ```
 
 `AUTH_DOMAIN` must be a subdomain of `CADENCE_DOMAIN` (for example
@@ -228,6 +228,24 @@ Add more people by re-running `scripts/init-auth.sh`. To require a second
 factor, change the rule in `deploy/authelia/configuration.yml` from
 `one_factor` to `two_factor`; users then enrol an authenticator on first
 login.
+
+Authelia watches `deploy/authelia/users.yml`, so account changes apply within
+a second or two, without a restart. To lock someone out, for instance if their
+password leaked, add `disabled: true` under their username:
+
+```yaml
+users:
+  someone:
+    disabled: true
+    displayname: 'Someone'
+    password: '$argon2id$...'
+```
+
+That blocks new logins and ends any session already signed in, on the next
+request. Removing the user entirely works the same way. This depends on
+`/config` being mounted as a directory, which the overlays do: through a
+single-file bind mount the watcher never sees the write, and the change would
+only take effect on `scripts/stack.sh restart`.
 
 ## Building / publishing images
 

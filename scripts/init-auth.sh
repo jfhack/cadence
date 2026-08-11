@@ -86,4 +86,11 @@ echo "Wrote ${USERS_FILE} (user: ${username})"
 echo
 echo "Next:"
 echo "  1. Set CADENCE_DOMAIN and AUTH_DOMAIN in .env, and point both at this host in DNS."
-echo "  2. docker compose -f docker-compose.yml -f docker-compose.caddy.yml up -d"
+echo "  2. Start the stack:"
+echo "       scripts/stack.sh start --caddy      # includes Caddy, gets TLS for you"
+echo "       scripts/stack.sh start              # Authelia only, behind your own proxy"
+echo "       scripts/stack.sh start --no-ports   # same, but nothing published on the host:"
+echo "                                           # for a proxy on a shared docker network"
+echo
+echo "Re-running this script while the stack is up is fine: Authelia watches"
+echo "${USERS_FILE} and picks up new users without a restart."

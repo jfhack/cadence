@@ -1,4 +1,5 @@
 import { Injectable, computed, effect, signal } from '@angular/core';
+import { persistOnChange } from './persist';
 
 export interface MicProcessing {
   echoCancellation: boolean;
@@ -34,7 +35,10 @@ export class MicSettingsService {
       : {};
 
   constructor() {
-    effect(() => this.persist(this.processing(), this.gainDb()));
+    persistOnChange(
+      () => ({ processing: this.processing(), gainDb: this.gainDb() }),
+      (value) => this.persist(value.processing, value.gainDb),
+    );
   }
 
   setGainDb(value: number): void {

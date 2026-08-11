@@ -4,6 +4,7 @@ import { firstValueFrom } from 'rxjs';
 
 import { TranslatorConfig } from './models';
 import { PreferencesService } from './preferences.service';
+import { persistOnChange } from './persist';
 
 const PROMPT_KEY = 'cadence.translatorPrompt';
 
@@ -45,7 +46,7 @@ export class TranslatorService {
   readonly error = signal<string | null>(null);
 
   constructor() {
-    effect(() => this.prefs.write('translatorPrompt', PROMPT_KEY, this.prompt()));
+    persistOnChange(this.prompt, (value) => this.prefs.write('translatorPrompt', PROMPT_KEY, value));
     this.prefs.onEnable('translatorPrompt', () =>
       this.prefs.write('translatorPrompt', PROMPT_KEY, this.prompt()),
     );

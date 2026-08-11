@@ -1,4 +1,5 @@
 import { Injectable, effect, signal } from '@angular/core';
+import { persistOnChange } from './persist';
 
 export type RememberKey =
   | 'language'
@@ -32,7 +33,7 @@ export class PreferencesService {
   private readonly flushers = new Map<RememberKey, () => void>();
 
   constructor() {
-    effect(() => this.persist(this.remember()));
+    persistOnChange(this.remember, (value) => this.persist(value));
   }
 
   isOn(category: RememberKey): boolean {

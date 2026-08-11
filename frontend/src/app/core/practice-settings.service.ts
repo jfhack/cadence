@@ -1,6 +1,7 @@
 import { Injectable, effect, inject, signal, untracked } from '@angular/core';
 
 import { PreferencesService } from './preferences.service';
+import { persistOnChange } from './persist';
 
 const LOCALE_KEY = 'cadence.locale';
 const TEXT_KEY = 'cadence.referenceText';
@@ -24,7 +25,7 @@ export class PracticeSettingsService {
   private lastLocale = this.locale();
 
   constructor() {
-    effect(() => this.prefs.write('language', LOCALE_KEY, this.locale()));
+    persistOnChange(this.locale, (value) => this.prefs.write('language', LOCALE_KEY, value));
     effect(() => {
       const locale = this.locale();
       if (locale === this.lastLocale) {
@@ -39,8 +40,8 @@ export class PracticeSettingsService {
       const locale = untracked(this.locale);
       this.texts.update((all) => (all[locale] === text ? all : { ...all, [locale]: text }));
     });
-    effect(() => this.prefs.write('referenceText', TEXT_KEY, this.texts()));
-    effect(() => this.prefs.write('sourceText', SOURCE_KEY, this.sourceText()));
+    persistOnChange(this.texts, (value) => this.prefs.write('referenceText', TEXT_KEY, value));
+    persistOnChange(this.sourceText, (value) => this.prefs.write('sourceText', SOURCE_KEY, value));
 
     this.prefs.onEnable('language', () => this.prefs.write('language', LOCALE_KEY, this.locale()));
     this.prefs.onEnable('referenceText', () =>

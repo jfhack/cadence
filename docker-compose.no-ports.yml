@@ -4,6 +4,10 @@
 # reaches cadence-frontend:80 directly, so no host binding is needed and
 # port 8080 stays free.
 #
+#   scripts/stack.sh start --no-ports --plain   # same as the -f chain below
+#
+# or by hand:
+#
 #   docker compose -f docker-compose.yml -f docker-compose.no-ports.yml up -d
 #
 # compose cannot drop a port mapping through a variable: an empty entry is
