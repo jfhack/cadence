@@ -1,13 +1,13 @@
 # syntax=docker/dockerfile:1
 
-FROM --platform=$BUILDPLATFORM node:22-alpine AS build
+FROM --platform=$BUILDPLATFORM node:26.13.0-alpine@sha256:8996bb5821d62a8fd9bb27c1cb07462f3fdce6e47d640c6a881ead0b064ce216 AS build
 WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci --no-audit --no-fund
 COPY . .
 RUN npm run build
 
-FROM nginx:1.29-alpine AS runtime
+FROM nginx:1.31.8-alpine@sha256:713fc2ebfd92e8217db451477182ee91944b123d2b1ee9fd5a8c6e91ca6c3a11 AS runtime
 LABEL org.opencontainers.image.source=https://github.com/jfhack/cadence
 LABEL org.opencontainers.image.description="Cadence frontend: Angular UI served by nginx, proxying the API and websockets to the backend"
 LABEL org.opencontainers.image.licenses=MIT

@@ -23,7 +23,7 @@ services:
 
   cadence-frontend:
     container_name: cadence-frontend-dev
-    image: node:22-alpine
+    image: node:26.13.0-alpine@sha256:8996bb5821d62a8fd9bb27c1cb07462f3fdce6e47d640c6a881ead0b064ce216
     working_dir: /app
     command: sh -c "npm install --no-audit --no-fund && npm start -- --host 0.0.0.0 --port 4200"
     environment:
