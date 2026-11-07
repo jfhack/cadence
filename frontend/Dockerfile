@@ -1,7 +1,5 @@
 # syntax=docker/dockerfile:1
 
-# the Angular build always runs on the build host architecture; only the
-# nginx runtime stage is built per target platform.
 FROM --platform=$BUILDPLATFORM node:22-alpine AS build
 WORKDIR /app
 COPY package.json package-lock.json ./
